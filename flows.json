@@ -1,0 +1,414 @@
+[
+  {
+    "id": "tab",
+    "type": "tab",
+    "label": "Forest Fire Monitoring",
+    "disabled": false,
+    "info": ""
+  },
+  {
+    "id": "in",
+    "type": "http in",
+    "z": "tab",
+    "name": "Receive ESP32 data",
+    "url": "/firedata",
+    "method": "post",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 120,
+    "wires": [
+      [
+        "json"
+      ]
+    ]
+  },
+  {
+    "id": "json",
+    "type": "json",
+    "z": "tab",
+    "name": "Parse JSON",
+    "property": "payload",
+    "action": "",
+    "pretty": false,
+    "x": 340,
+    "y": 120,
+    "wires": [
+      [
+        "fn"
+      ]
+    ]
+  },
+  {
+    "id": "fn",
+    "type": "function",
+    "z": "tab",
+    "name": "Validate, split nodes, alert",
+    "func": "const key = env.get(\"NODE_RED_API_KEY\") || \"\";\nconst got = msg.req?.headers?.[\"x-api-key\"];\nif (!key || got !== key) {\n  msg.statusCode = 401; msg.payload = {ok:false,error:\"Unauthorized\"};\n  return [null,null,null,null,null,null,null,null,null,msg];\n}\nlet d = msg.payload;\nif (typeof d === \"string\") { try { d = JSON.parse(d); } catch(e) {\n  msg.statusCode=400; msg.payload={ok:false,error:\"Invalid JSON\"};\n  return [null,null,null,null,null,null,null,null,null,msg];\n}}\nif (!d || ![\"node1\",\"node2\"].includes(d.nodeId)) {\n  msg.statusCode=400; msg.payload={ok:false,error:\"nodeId must be node1 or node2\"};\n  return [null,null,null,null,null,null,null,null,null,msg];\n}\nconst t=Number(d.temperature), h=Number(d.humidity), s=Number(d.smoke_level);\nif (![t,h,s].every(Number.isFinite)) {\n  msg.statusCode=400; msg.payload={ok:false,error:\"Invalid sensor values\"};\n  return [null,null,null,null,null,null,null,null,null,msg];\n}\nconst alert=d.fire_detected===true || t>=50 || h<=20 || s>=600;\nconst id=d.nodeId, old=flow.get(id)||{};\nflow.set(id,{temperature:t,humidity:h,smoke_level:s,alert,lastSeen:Date.now()});\nconst a=flow.get(\"node1\")||{}, b=flow.get(\"node2\")||{};\nfunction val(o,k,suffix=\"\"){return o[k]===undefined?\"รอข้อมูล\":String(o[k])+suffix;}\nfunction stat(o){if(!o.lastSeen)return \"รอข้อมูล\"; if(Date.now()-o.lastSeen>15000)return \"OFFLINE\"; return o.alert?\"ALERT: ตรวจสอบพื้นที่\":\"NORMAL\";}\nfunction m(payload){return {payload};}\nlet tg=null;\nif(alert && old.alert!==true){\n  const token=env.get(\"TELEGRAM_BOT_TOKEN\")||\"\", chat=env.get(\"TELEGRAM_CHAT_ID\")||\"\";\n  if(token && chat) tg={method:\"POST\",url:\"https://api.telegram.org/bot\"+token+\"/sendMessage\",\n    headers:{\"content-type\":\"application/json\"},\n    payload:{chat_id:chat,text:\"🔥 แจ้งเตือนระบบตรวจจับไฟป่า\\\\nNode: \"+id+\"\\\\nอุณหภูมิ: \"+t+\" °C\\\\nความชื้น: \"+h+\" %\\\\nระดับควัน (ADC): \"+s+\"\\\\nกรุณาตรวจสอบพื้นที่\"}};\n  else node.warn(\"Telegram settings missing in .env\");\n}\nreturn [m(val(a,\"temperature\",\" °C\")),m(val(a,\"humidity\",\" %\")),m(val(a,\"smoke_level\")),m(stat(a)),\n        m(val(b,\"temperature\",\" °C\")),m(val(b,\"humidity\",\" %\")),m(val(b,\"smoke_level\")),m(stat(b)),tg,\n        {statusCode:200,payload:{ok:true,nodeId:id}}];",
+    "outputs": 10,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 570,
+    "y": 120,
+    "wires": [
+      [
+        "n1t"
+      ],
+      [
+        "n1h"
+      ],
+      [
+        "n1s"
+      ],
+      [
+        "n1st"
+      ],
+      [
+        "n2t"
+      ],
+      [
+        "n2h"
+      ],
+      [
+        "n2s"
+      ],
+      [
+        "n2st"
+      ],
+      [
+        "tghttp"
+      ],
+      [
+        "resp"
+      ]
+    ]
+  },
+  {
+    "id": "resp",
+    "type": "http response",
+    "z": "tab",
+    "name": "HTTP response",
+    "statusCode": "",
+    "headers": {},
+    "x": 820,
+    "y": 540,
+    "wires": []
+  },
+  {
+    "id": "tghttp",
+    "type": "http request",
+    "z": "tab",
+    "name": "Send Telegram alert",
+    "method": "use",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "senderr": false,
+    "headers": [],
+    "x": 830,
+    "y": 440,
+    "wires": [
+      [
+        "tgdebug"
+      ]
+    ]
+  },
+  {
+    "id": "tgdebug",
+    "type": "debug",
+    "z": "tab",
+    "name": "Telegram API result",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1060,
+    "y": 440,
+    "wires": []
+  },
+  {
+    "id": "base",
+    "type": "ui-base",
+    "name": "Forest Fire Dashboard",
+    "path": "/dashboard",
+    "appIcon": "",
+    "includeClientData": true,
+    "acceptsClientConfig": [
+      "ui-notification",
+      "ui-control"
+    ],
+    "showPathInSidebar": false,
+    "headerContent": "page",
+    "navigationStyle": "default",
+    "title": "Forest Fire Monitoring",
+    "showReconnectNotification": true,
+    "notificationDisplayTime": 1,
+    "showDisconnectNotification": true,
+    "allowInstall": false
+  },
+  {
+    "id": "theme",
+    "type": "ui-theme",
+    "name": "Forest Fire Theme",
+    "colors": {
+      "surface": "#ffffff",
+      "primary": "#1565c0",
+      "bgPage": "#eeeeee",
+      "groupBg": "#ffffff",
+      "groupOutline": "#cccccc"
+    },
+    "sizes": {
+      "density": "default",
+      "pagePadding": "12px",
+      "groupGap": "12px",
+      "groupBorderRadius": "4px",
+      "widgetGap": "12px"
+    }
+  },
+  {
+    "id": "page",
+    "type": "ui-page",
+    "name": "Forest Fire",
+    "ui": "base",
+    "path": "/home",
+    "icon": "dashboard",
+    "layout": "grid",
+    "theme": "theme",
+    "order": 1,
+    "className": "",
+    "visible": "true",
+    "disabled": "false"
+  },
+  {
+    "id": "g1",
+    "type": "ui-group",
+    "name": "Slave 1 - node1",
+    "page": "page",
+    "width": "6",
+    "height": "4",
+    "order": 1,
+    "showTitle": true,
+    "className": "",
+    "visible": "true",
+    "disabled": "false",
+    "groupType": "default"
+  },
+  {
+    "id": "g2",
+    "type": "ui-group",
+    "name": "Slave 2 - node2",
+    "page": "page",
+    "width": "6",
+    "height": "4",
+    "order": 2,
+    "showTitle": true,
+    "className": "",
+    "visible": "true",
+    "disabled": "false",
+    "groupType": "default"
+  },
+  {
+    "id": "n1t",
+    "type": "ui-text",
+    "z": "tab",
+    "group": "g1",
+    "name": "อุณหภูมิ",
+    "label": "อุณหภูมิ",
+    "order": 1,
+    "width": "6",
+    "height": "1",
+    "format": "{{msg.payload}}",
+    "layout": "row-spread",
+    "className": "",
+    "style": false,
+    "font": "",
+    "fontSize": 16,
+    "color": "",
+    "wrap": true,
+    "x": 820,
+    "y": 160,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "n1h",
+    "type": "ui-text",
+    "z": "tab",
+    "group": "g1",
+    "name": "ความชื้น",
+    "label": "ความชื้น",
+    "order": 2,
+    "width": "6",
+    "height": "1",
+    "format": "{{msg.payload}}",
+    "layout": "row-spread",
+    "className": "",
+    "style": false,
+    "font": "",
+    "fontSize": 16,
+    "color": "",
+    "wrap": true,
+    "x": 820,
+    "y": 200,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "n1s",
+    "type": "ui-text",
+    "z": "tab",
+    "group": "g1",
+    "name": "ระดับควัน (ADC)",
+    "label": "ระดับควัน (ADC)",
+    "order": 3,
+    "width": "6",
+    "height": "1",
+    "format": "{{msg.payload}}",
+    "layout": "row-spread",
+    "className": "",
+    "style": false,
+    "font": "",
+    "fontSize": 16,
+    "color": "",
+    "wrap": true,
+    "x": 820,
+    "y": 240,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "n1st",
+    "type": "ui-text",
+    "z": "tab",
+    "group": "g1",
+    "name": "สถานะ",
+    "label": "สถานะ",
+    "order": 4,
+    "width": "6",
+    "height": "1",
+    "format": "{{msg.payload}}",
+    "layout": "row-spread",
+    "className": "",
+    "style": false,
+    "font": "",
+    "fontSize": 16,
+    "color": "",
+    "wrap": true,
+    "x": 820,
+    "y": 280,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "n2t",
+    "type": "ui-text",
+    "z": "tab",
+    "group": "g2",
+    "name": "อุณหภูมิ",
+    "label": "อุณหภูมิ",
+    "order": 1,
+    "width": "6",
+    "height": "1",
+    "format": "{{msg.payload}}",
+    "layout": "row-spread",
+    "className": "",
+    "style": false,
+    "font": "",
+    "fontSize": 16,
+    "color": "",
+    "wrap": true,
+    "x": 820,
+    "y": 320,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "n2h",
+    "type": "ui-text",
+    "z": "tab",
+    "group": "g2",
+    "name": "ความชื้น",
+    "label": "ความชื้น",
+    "order": 2,
+    "width": "6",
+    "height": "1",
+    "format": "{{msg.payload}}",
+    "layout": "row-spread",
+    "className": "",
+    "style": false,
+    "font": "",
+    "fontSize": 16,
+    "color": "",
+    "wrap": true,
+    "x": 820,
+    "y": 360,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "n2s",
+    "type": "ui-text",
+    "z": "tab",
+    "group": "g2",
+    "name": "ระดับควัน (ADC)",
+    "label": "ระดับควัน (ADC)",
+    "order": 3,
+    "width": "6",
+    "height": "1",
+    "format": "{{msg.payload}}",
+    "layout": "row-spread",
+    "className": "",
+    "style": false,
+    "font": "",
+    "fontSize": 16,
+    "color": "",
+    "wrap": true,
+    "x": 820,
+    "y": 400,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "n2st",
+    "type": "ui-text",
+    "z": "tab",
+    "group": "g2",
+    "name": "สถานะ",
+    "label": "สถานะ",
+    "order": 4,
+    "width": "6",
+    "height": "1",
+    "format": "{{msg.payload}}",
+    "layout": "row-spread",
+    "className": "",
+    "style": false,
+    "font": "",
+    "fontSize": 16,
+    "color": "",
+    "wrap": true,
+    "x": 820,
+    "y": 440,
+    "wires": [
+      []
+    ]
+  }
+]

@@ -1,0 +1,22 @@
+services:
+  node-red:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: forest-fire-node-red:local
+    container_name: forest-fire-node-red
+    ports:
+      - "1880:1880"
+    volumes:
+      - node_red_data:/data
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - TZ=Asia/Bangkok
+      - NODE_RED_API_KEY=${NODE_RED_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+
+volumes:
+  node_red_data:

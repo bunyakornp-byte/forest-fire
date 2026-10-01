@@ -1,0 +1,8 @@
+{
+  "name": "forest-fire-node-red-data",
+  "description": "Extra nodes for the Forest Fire Node-RED project (userDir package.json)",
+  "version": "1.0.0",
+  "dependencies": {
+    "@flowfuse/node-red-dashboard": "^1.20.0"
+  }
+}
